@@ -54,17 +54,26 @@
             margin-top: 15px;
             margin-bottom: 30px;
         }
-        /* Styling for the button */
+        /* Styling for the button container */
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px; /* Space between buttons */
+            flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+        }
+        /* Styling for buttons */
         button {
             background-color: #3498db;
             color: white;
             border: none;
-            padding: 12px 25px;
+            padding: 12px 20px; /* Adjusted padding for better fit */
             border-radius: 8px; /* Rounded corners */
             cursor: pointer;
             font-size: 1.1em;
             transition: background-color 0.3s ease, transform 0.2s ease;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            flex-grow: 1; /* Allow buttons to grow and fill space */
+            max-width: 200px; /* Limit max width of buttons */
         }
         /* Hover effect for the button */
         button:hover {
@@ -102,8 +111,12 @@
                 font-size: 1.1em;
             }
             button {
-                padding: 10px 20px;
-                font-size: 1em;
+                padding: 10px 15px; /* Further adjusted padding */
+                font-size: 0.95em;
+            }
+            .button-group {
+                flex-direction: column; /* Stack buttons vertically on small screens */
+                gap: 8px;
             }
         }
     </style>
@@ -115,56 +128,155 @@
     <script type="text/babel">
         // API endpoint for fetching a random Book of Mormon verse.
         const API_URL = 'https://us-central1-ha-sefer-api.cloudfunctions.net/holybookApi/random_verse?book=Book_of_Mormon';
+        const MAX_HISTORY_LENGTH = 20; // Maximum number of verses to store in history
 
         /**
          * React functional component to fetch and display a random Book of Mormon verse.
+         * It now includes history navigation using browser's localStorage.
          */
         function VerseFetcher() {
-            // State variables for verse data, loading status, and error messages
-            const [verse, setVerse] = React.useState(null);
+            // State variables for the currently displayed verse, loading status, error messages,
+            // the history of verses, and the current index within that history.
+            const [currentVerse, setCurrentVerse] = React.useState(null);
             const [loading, setLoading] = React.useState(false);
             const [error, setError] = React.useState(null);
+            const [verseHistory, setVerseHistory] = React.useState([]);
+            const [historyIndex, setHistoryIndex] = React.useState(-1); // -1 means no verse loaded yet
+
+            // Effect to load history from localStorage on initial component mount
+            React.useEffect(() => {
+                try {
+                    const storedHistory = localStorage.getItem('verseHistory');
+                    const storedIndex = localStorage.getItem('historyIndex');
+
+                    if (storedHistory && storedIndex !== null) {
+                        const parsedHistory = JSON.parse(storedHistory);
+                        const parsedIndex = parseInt(storedIndex, 10);
+
+                        if (parsedHistory.length > 0 && parsedIndex >= 0 && parsedIndex < parsedHistory.length) {
+                            setVerseHistory(parsedHistory);
+                            setHistoryIndex(parsedIndex);
+                            setCurrentVerse(parsedHistory[parsedIndex]);
+                        } else {
+                            // If history is invalid or empty, fetch a new verse
+                            fetchNewRandomVerse();
+                        }
+                    } else {
+                        // No history found, fetch the first verse
+                        fetchNewRandomVerse();
+                    }
+                } catch (e) {
+                    console.error("Error loading history from localStorage:", e);
+                    // If there's an error loading, proceed to fetch a new verse
+                    fetchNewRandomVerse();
+                }
+            }, []); // Empty dependency array ensures this runs only once on mount
+
+            // Effect to save history to localStorage whenever verseHistory or historyIndex changes
+            React.useEffect(() => {
+                if (verseHistory.length > 0) {
+                    localStorage.setItem('verseHistory', JSON.stringify(verseHistory));
+                    localStorage.setItem('historyIndex', historyIndex.toString());
+                } else {
+                    // Clear history from localStorage if verseHistory becomes empty
+                    localStorage.removeItem('verseHistory');
+                    localStorage.removeItem('historyIndex');
+                }
+            }, [verseHistory, historyIndex]);
 
             /**
-             * Asynchronously fetches a random verse from the API.
-             * Handles loading states and error reporting.
+             * Fetches a new random verse from the API and adds it to the history.
+             * This function is called when there's no "next" verse in history.
              */
-            const fetchVerse = async () => {
-                setLoading(true); // Set loading to true while fetching
-                setError(null);   // Clear any previous errors
-                setVerse(null);   // Clear any previously displayed verse
+            const fetchNewRandomVerse = async () => {
+                setLoading(true);
+                setError(null);
 
                 try {
-                    const response = await fetch(API_URL); // Make the API call
-                    // Check if the response was successful (status code 200-299)
+                    const response = await fetch(API_URL);
                     if (!response.ok) {
-                        // If response is not OK, try to read the response body for more details
                         const errorText = await response.text();
                         console.error("API Error Response Body:", errorText);
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
-                    const data = await response.json(); // Parse the JSON response
+                    const data = await response.json();
 
-                    // Update the state with the sentence and the raw header.
-                    // The header will no longer be parsed into individual components.
-                    setVerse({
+                    // Create the new verse object
+                    const newVerse = {
                         Sentence: data.sentence,
-                        RawHeader: data.header // Store the original header directly
+                        RawHeader: data.header
+                    };
+
+                    setVerseHistory(prevHistory => {
+                        let updatedHistory = [...prevHistory];
+
+                        // If the user navigated back and then clicked "Next" (which resulted in a fetch),
+                        // we need to truncate the history from the current index forward.
+                        if (historyIndex < prevHistory.length - 1) {
+                            updatedHistory = prevHistory.slice(0, historyIndex + 1);
+                        }
+
+                        // Add the new verse
+                        updatedHistory.push(newVerse);
+
+                        // If history exceeds max length, remove the oldest verse
+                        if (updatedHistory.length > MAX_HISTORY_LENGTH) {
+                            updatedHistory = updatedHistory.slice(1); // Remove the first element
+                        }
+                        return updatedHistory;
                     });
 
+                    // Update the history index to point to the newly added verse.
+                    // This will always be the last element in the updated history.
+                    setHistoryIndex(prevIndex => {
+                        // If history was full and truncated, the new index will be MAX_HISTORY_LENGTH - 1
+                        // otherwise, it's just prevIndex + 1 (or 0 if history was empty)
+                        return Math.max(0, verseHistory.length - (verseHistory.length >= MAX_HISTORY_LENGTH ? 0 : 1)) + 1;
+                    });
+                    
+                    setCurrentVerse(newVerse); // Set the newly fetched verse as current
+
                 } catch (e) {
-                    // Catch and handle any errors during the fetch operation
                     setError("Failed to fetch verse. Please try again later.");
-                    console.error("Error fetching verse:", e); // Log the error for debugging
+                    console.error("Error fetching verse:", e);
                 } finally {
-                    setLoading(false); // Set loading to false once fetching is complete (success or failure)
+                    setLoading(false);
                 }
             };
 
-            // useEffect hook to fetch a verse when the component mounts
-            React.useEffect(() => {
-                fetchVerse();
-            }, []); // Empty dependency array ensures this runs only once on mount
+            /**
+             * Navigates to the previous verse in history.
+             */
+            const goToPreviousVerse = () => {
+                if (historyIndex > 0) {
+                    const newIndex = historyIndex - 1;
+                    setHistoryIndex(newIndex);
+                    setCurrentVerse(verseHistory[newIndex]);
+                }
+            };
+
+            /**
+             * Handles the logic for the single "Next" button.
+             * It either navigates forward in history or fetches a new random verse.
+             */
+            const handleNextClick = () => {
+                if (loading) return; // Prevent multiple clicks while loading
+
+                if (historyIndex < verseHistory.length - 1) {
+                    // If there's a next verse in history, go to it
+                    const newIndex = historyIndex + 1;
+                    setHistoryIndex(newIndex);
+                    setCurrentVerse(verseHistory[newIndex]);
+                } else {
+                    // Otherwise, fetch a new random verse
+                    fetchNewRandomVerse();
+                }
+            };
+
+            // Determine if the "Previous" button should be disabled
+            const isPreviousDisabled = loading || historyIndex <= 0;
+            // Determine if the "Next" button should be disabled (only if loading)
+            const isNextDisabled = loading; // The button itself handles when to fetch vs. navigate
 
             return (
                 <div className="container">
@@ -174,21 +286,24 @@
                     {/* Display error message if an error occurred */}
                     {error && <p className="error">{error}</p>}
 
-                    {/* Display the verse if it has been successfully fetched */}
-                    {verse && (
+                    {/* Display the current verse if available */}
+                    {currentVerse && (
                         <div>
-                            <p className="verse-content">{verse.Sentence}</p>
-                            {/* Always display the raw header string */}
+                            <p className="verse-content">{currentVerse.Sentence}</p>
                             <p className="verse-reference">
-                                {verse.RawHeader}
+                                {currentVerse.RawHeader}
                             </p>
                         </div>
                     )}
 
-                    {/* Button to fetch another verse, disabled while loading */}
-                    <button onClick={fetchVerse} disabled={loading}>
-                        {loading ? 'Fetching...' : 'Get Another Verse'}
-                    </button>
+                    <div className="button-group">
+                        <button onClick={goToPreviousVerse} disabled={isPreviousDisabled}>
+                            Previous
+                        </button>
+                        <button onClick={handleNextClick} disabled={isNextDisabled}>
+                            {loading ? 'Loading...' : 'Next'}
+                        </button>
+                    </div>
                 </div>
             );
         }
