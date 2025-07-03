@@ -151,20 +151,24 @@
                     let book = '';
                     let chapter = '';
                     let verseNumber = '';
+                    let rawHeader = data.header; // Store the original header for fallback display
 
-                    const headerMatch = data.header.match(/^([^ ]+) (\d+):(\d+):$/);
+                    // Regex to capture Book, Chapter, and Verse.
+                    // It's made more flexible to handle variations in spacing and optional trailing colon.
+                    const headerMatch = rawHeader.match(/^([^ ]+)\s+(\d+):(\d+):?$/);
                     if (headerMatch) {
                         book = headerMatch[1];
                         chapter = headerMatch[2];
                         verseNumber = headerMatch[3];
                     }
 
-                    // Update the state with parsed data
+                    // Update the state with parsed data and the raw header
                     setVerse({
                         Sentence: data.sentence,
                         Book: book,
                         Chapter: chapter,
-                        VerseNumber: verseNumber
+                        VerseNumber: verseNumber,
+                        RawHeader: rawHeader // Store raw header for fallback display
                     });
 
                 } catch (e) {
@@ -193,8 +197,13 @@
                     {verse && (
                         <div>
                             <p className="verse-content">{verse.Sentence}</p>
-                            {/* Display the parsed reference */}
-                            <p className="verse-reference">{verse.Book} {verse.Chapter}:{verse.VerseNumber}</p>
+                            {/* Display the parsed reference, or the raw header if parsing failed */}
+                            <p className="verse-reference">
+                                {verse.Book && verse.Chapter && verse.VerseNumber
+                                    ? `${verse.Book} ${verse.Chapter}:${verse.VerseNumber}`
+                                    : verse.RawHeader /* Fallback to raw header if parsing fails */
+                                }
+                            </p>
                         </div>
                     )}
 
