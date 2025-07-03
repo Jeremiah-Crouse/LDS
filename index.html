@@ -114,10 +114,6 @@
 
     <script type="text/babel">
         // API endpoint for fetching a random Book of Mormon verse.
-        // The error message "Please specify a 'book' parameter (e.g., ?book=Ani_Ganth)"
-        // indicates that the API expects a 'book' parameter.
-        // Based on the example, the value for the book name might need to be capitalized
-        // with underscores, matching the original user's input format for the book name.
         const API_URL = 'https://us-central1-ha-sefer-api.cloudfunctions.net/holybookApi/random_verse?book=Book_of_Mormon';
 
         /**
@@ -148,7 +144,29 @@
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     const data = await response.json(); // Parse the JSON response
-                    setVerse(data); // Set the fetched verse data to state
+
+                    // The API returns the verse content in a "sentence" field and the reference
+                    // in a "header" field (e.g., "Ether 3:3:").
+                    // We need to parse the "header" to extract Book, Chapter, and VerseNumber.
+                    let book = '';
+                    let chapter = '';
+                    let verseNumber = '';
+
+                    const headerMatch = data.header.match(/^([^ ]+) (\d+):(\d+):$/);
+                    if (headerMatch) {
+                        book = headerMatch[1];
+                        chapter = headerMatch[2];
+                        verseNumber = headerMatch[3];
+                    }
+
+                    // Update the state with parsed data
+                    setVerse({
+                        Sentence: data.sentence,
+                        Book: book,
+                        Chapter: chapter,
+                        VerseNumber: verseNumber
+                    });
+
                 } catch (e) {
                     // Catch and handle any errors during the fetch operation
                     setError("Failed to fetch verse. Please try again later.");
@@ -174,7 +192,8 @@
                     {/* Display the verse if it has been successfully fetched */}
                     {verse && (
                         <div>
-                            <p className="verse-content">{verse.Verse}</p>
+                            <p className="verse-content">{verse.Sentence}</p>
+                            {/* Display the parsed reference */}
                             <p className="verse-reference">{verse.Book} {verse.Chapter}:{verse.VerseNumber}</p>
                         </div>
                     )}
