@@ -145,30 +145,11 @@
                     }
                     const data = await response.json(); // Parse the JSON response
 
-                    // The API returns the verse content in a "sentence" field and the reference
-                    // in a "header" field (e.g., "Ether 3:3:").
-                    // We need to parse the "header" to extract Book, Chapter, and VerseNumber.
-                    let book = '';
-                    let chapter = '';
-                    let verseNumber = '';
-                    let rawHeader = data.header; // Store the original header for fallback display
-
-                    // Regex to capture Book, Chapter, and Verse.
-                    // It's made more flexible to handle variations in spacing and optional trailing colon.
-                    const headerMatch = rawHeader.match(/^([^ ]+)\s+(\d+):(\d+):?$/);
-                    if (headerMatch) {
-                        book = headerMatch[1];
-                        chapter = headerMatch[2];
-                        verseNumber = headerMatch[3];
-                    }
-
-                    // Update the state with parsed data and the raw header
+                    // Update the state with the sentence and the raw header.
+                    // The header will no longer be parsed into individual components.
                     setVerse({
                         Sentence: data.sentence,
-                        Book: book,
-                        Chapter: chapter,
-                        VerseNumber: verseNumber,
-                        RawHeader: rawHeader // Store raw header for fallback display
+                        RawHeader: data.header // Store the original header directly
                     });
 
                 } catch (e) {
@@ -197,12 +178,9 @@
                     {verse && (
                         <div>
                             <p className="verse-content">{verse.Sentence}</p>
-                            {/* Display the parsed reference, or the raw header if parsing failed */}
+                            {/* Always display the raw header string */}
                             <p className="verse-reference">
-                                {verse.Book && verse.Chapter && verse.VerseNumber
-                                    ? `${verse.Book} ${verse.Chapter}:${verse.VerseNumber}`
-                                    : verse.RawHeader /* Fallback to raw header if parsing fails */
-                                }
+                                {verse.RawHeader}
                             </p>
                         </div>
                     )}
